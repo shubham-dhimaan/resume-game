@@ -1,0 +1,10 @@
+{
+  "description": "An interactive portfolio for recruiters to explore a candidate’s career, skills, and experience through a quick, playful game, with CV and contact links.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

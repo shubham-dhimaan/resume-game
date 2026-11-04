@@ -1,0 +1,186 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Newsreader", serif;
+  --font-sans: "DM Sans", sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    min-width: 320px;
+    background: #f6f4ef;
+    font-family: "DM Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  a {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: #cad8eb;
+    color: #25231f;
+  }
+}
+
+@layer components {
+  .nav-link {
+    position: relative;
+    transition: color 180ms ease;
+  }
+
+  .nav-link::after {
+    position: absolute;
+    right: 0;
+    bottom: -4px;
+    left: 0;
+    height: 1px;
+    content: "";
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform 200ms ease;
+  }
+
+  .nav-link:hover {
+    color: #25231f;
+  }
+
+  .nav-link:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+
+  .section-label {
+    font-size: 12px;
+    color: rgb(37 35 31 / 42%);
+  }
+}
+
+.game-window {
+  animation: window-in 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.game-face {
+  position: relative;
+  z-index: 2;
+  width: 106px;
+  height: 106px;
+  border: 1px solid rgb(37 35 31 / 12%);
+  border-radius: 40% 48% 44% 50%;
+  background: #e06d45;
+  box-shadow:
+    12px 14px 0 #e7c766,
+    22px 27px 0 #dbe7d4;
+  animation: face-float 3.4s ease-in-out infinite;
+}
+
+.game-eye {
+  position: absolute;
+  top: 40px;
+  width: 7px;
+  height: 10px;
+  border-radius: 99px;
+  background: #25231f;
+  animation: blink 4s infinite;
+}
+
+.game-eye-left {
+  left: 32px;
+}
+
+.game-eye-right {
+  right: 32px;
+}
+
+.game-smile {
+  position: absolute;
+  top: 63px;
+  left: 41px;
+  width: 24px;
+  height: 11px;
+  border-bottom: 2px solid #25231f;
+  border-radius: 50%;
+}
+
+.soft-orbit {
+  position: absolute;
+  border: 1px solid rgb(37 35 31 / 7%);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.orbit-one {
+  width: 280px;
+  height: 280px;
+  animation: orbit 18s linear infinite;
+}
+
+.orbit-two {
+  width: 400px;
+  height: 180px;
+  transform: rotate(-18deg);
+}
+
+.milestone-row {
+  transition: padding 220ms ease;
+}
+
+@keyframes window-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) rotate(0.8deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(0);
+  }
+}
+
+@keyframes face-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(2deg);
+  }
+}
+
+@keyframes blink {
+  0%,
+  47%,
+  51%,
+  100% {
+    transform: scaleY(1);
+  }
+  49% {
+    transform: scaleY(0.08);
+  }
+}
+
+@keyframes orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
