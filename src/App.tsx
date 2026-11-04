@@ -1,5 +1,8 @@
 import { useState } from "react"
 import ResumeGame from "./ResumeGame"
+import avatarImg from "/shubham-avatar.jpg?url"
+import amazonImg from "/shubham-at-amazon.jpg?url"
+import resumePdf from "/Shubham-Dhiman-Resume.pdf?url"
 
 const milestones = [
   {
@@ -93,7 +96,7 @@ export default function App() {
             aria-label="Shubham Dhiman, home"
           >
             <img
-              src="/shubham-avatar.jpg"
+              src={avatarImg}
               alt=""
               className="size-7 rounded-full border border-black/10 object-cover"
             />
@@ -329,7 +332,7 @@ export default function App() {
         <div className="mx-auto grid max-w-[1240px] gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center lg:gap-20">
           <figure className="w-full">
             <img
-              src="/shubham-at-amazon.jpg"
+              src={amazonImg}
               alt="Shubham standing beneath the Amazon smile at the Amazon office"
               className="h-auto w-full rounded-[26px] border border-black/10"
             />
@@ -401,7 +404,7 @@ export default function App() {
               </a>
               <a
                 className="nav-link"
-                href="/Shubham-Dhiman-Resume.pdf"
+                href={resumePdf}
                 download
               >
                 Resume
