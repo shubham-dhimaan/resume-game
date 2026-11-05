@@ -1436,7 +1436,7 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
 
                 <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
                   <a
-                    href="/Shubham-Dhiman-Resume.pdf"
+                    href={`${import.meta.env.BASE_URL}Shubham-Dhiman-Resume.pdf`}
                     download="Shubham-Dhiman-Resume.pdf"
                     className="flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-[#25231f] text-white text-xs font-medium hover:bg-[#e06d45] transition-all shadow-md"
                   >
