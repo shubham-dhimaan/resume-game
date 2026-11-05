@@ -2,7 +2,8 @@ import { useState } from "react"
 import ResumeGame from "./ResumeGame"
 import avatarImg from "/shubham-avatar.jpg?url"
 import amazonImg from "/shubham-at-amazon.jpg?url"
-import resumePdf from "/Shubham-Dhiman-Resume.pdf?url"
+
+const resumePdf = `${import.meta.env.BASE_URL}Shubham-Dhiman-Resume.pdf`
 
 const milestones = [
   {
@@ -200,6 +201,16 @@ export default function App() {
                 <Arrow />
               </span>
             </button>
+            <a
+              href={resumePdf}
+              download
+              className="flex items-center gap-1.5 text-[12px] text-black/38 transition-colors hover:text-black/60"
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6.5 1v7M3.5 5.5l3 3 3-3M2 11h9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Download resume
+            </a>
             <a className="nav-link text-[11px] text-black/35" href="#work">
               Just get the short summary{" "}
               <span className="italic">(no time to play)</span>
