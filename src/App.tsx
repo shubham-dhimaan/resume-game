@@ -115,7 +115,7 @@ export default function App() {
             <a className="nav-link" href="mailto:sdshubham10@gmail.com">
               Contact
             </a>
-            <a className="nav-link" href="/Shubham-Dhiman-Resume.pdf" download>
+            <a className="nav-link" href={resumePdf} download>
               Resume
             </a>
           </div>
@@ -150,7 +150,7 @@ export default function App() {
               ["Experience", "#work"],
               ["About", "#about"],
               ["Contact", "mailto:sdshubham10@gmail.com"],
-              ["Download resume", "/Shubham-Dhiman-Resume.pdf"],
+              ["Download resume", resumePdf],
             ].map(([label, href]) => (
               <a
                 key={label}
