@@ -274,6 +274,8 @@ export default function ResumeGame({
     initialSavedStateRef.current?.collectedSkills ?? []
   )
   const [totalXp, setTotalXp] = useState(initialSavedStateRef.current?.totalXp ?? 0)
+  // Aggregate all skills from all levels for final display
+  const allSkills = LEVELS.flatMap(l => l.skillsToCollect);
   const [activeNotification, setActiveNotification] = useState<string | null>(null)
   const [knockProgress, setKnockProgress] = useState(initialSavedStateRef.current?.knockProgress ?? 0)
   const [autoShoot, setAutoShoot] = useState(true)
@@ -857,15 +859,17 @@ export default function ResumeGame({
           ctx.fill()
 
           // Minion Dialogue Tag - Crisp and easy to read
-          ctx.font = "bold 10px 'DM Sans', sans-serif"
-          ctx.textAlign = "center"
-          const bubbleWidth = ctx.measureText(m.name).width + 14
-          ctx.fillStyle = "rgba(255, 255, 255, 0.95)"
-          drawSafeRoundRect(ctx, m.x - bubbleWidth / 2, my - 24, bubbleWidth, 17, 6)
-          ctx.fill()
-          ctx.stroke()
-          ctx.fillStyle = "#25231f"
-          ctx.fillText(m.name, m.x, my - 12)
+          if (m.name && m.name !== "undefined") {
+            ctx.font = "bold 10px 'DM Sans', sans-serif"
+            ctx.textAlign = "center"
+            const bubbleWidth = ctx.measureText(m.name).width + 14
+            ctx.fillStyle = "rgba(255, 255, 255, 0.95)"
+            drawSafeRoundRect(ctx, m.x - bubbleWidth / 2, my - 24, bubbleWidth, 17, 6)
+            ctx.fill()
+            ctx.stroke()
+            ctx.fillStyle = "#25231f"
+            ctx.fillText(m.name, m.x, my - 12)
+          }
 
           ctx.restore()
 
@@ -1056,10 +1060,12 @@ export default function ResumeGame({
         ctx.fill()
 
         // Boss Name & HP Bar
-        ctx.font = "bold 13px 'Newsreader', serif"
-        ctx.textAlign = "center"
-        ctx.fillStyle = "#25231f"
-        ctx.fillText(v.name, v.x + v.width / 2, vy - 34)
+        if (v.name && v.name !== "undefined") {
+          ctx.font = "bold 13px 'Newsreader', serif"
+          ctx.textAlign = "center"
+          ctx.fillStyle = "#25231f"
+          ctx.fillText(v.name, v.x + v.width / 2, vy - 34)
+        }
 
         const hpBarW = 110
         ctx.fillStyle = "rgba(0,0,0,0.1)"
@@ -1070,20 +1076,6 @@ export default function ResumeGame({
         ctx.fillStyle = hpRatio > 0.4 ? "#e06d45" : "#e53e3e"
         drawSafeRoundRect(ctx, v.x + v.width / 2 - hpBarW / 2, vy - 16, hpBarW * hpRatio, 7, 3)
         ctx.fill()
-
-        // Quote bubble
-        if (v.hp > 0 && Math.abs(eng.player.x - v.x) < 520) {
-          ctx.font = "italic 11px 'Newsreader', serif"
-          const quoteW = ctx.measureText(v.quote).width + 18
-          ctx.fillStyle = "#ffffff"
-          ctx.strokeStyle = "#25231f"
-          ctx.lineWidth = 1.5
-          drawSafeRoundRect(ctx, v.x + v.width / 2 - quoteW / 2, vy - 64, quoteW, 21, 6)
-          ctx.fill()
-          ctx.stroke()
-          ctx.fillStyle = "#25231f"
-          ctx.fillText(v.quote, v.x + v.width / 2, vy - 50)
-        }
 
         ctx.restore()
 
@@ -1439,21 +1431,26 @@ export default function ResumeGame({
           </div>
         )}
 
-        {/* Collected Skills Tray */}
+        {/* Collected Skills Tray (shows only recent 2-3 skills to avoid overcrowding) */}
         <div
           className={`absolute ${
-            isMobileMode ? "bottom-14 left-2.5 max-w-[50%]" : "bottom-2.5 left-2.5 max-w-[65%]"
-          } flex flex-wrap gap-1 pointer-events-none z-10`}
+            isMobileMode ? "bottom-14 left-2.5 max-w-[55%]" : "bottom-2.5 left-2.5 max-w-[65%]"
+          } flex items-center gap-1 pointer-events-none z-10 flex-wrap`}
         >
-          {collectedSkills.map((sk, idx) => (
+          {collectedSkills.slice(-3).map((sk, idx) => (
             <span
               key={`${sk.name}-${idx}`}
               className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/95 border border-black/10 text-[10px] text-[#25231f] shadow-sm font-medium"
             >
               <span>{sk.icon}</span>
-              <span>{sk.name}</span>
+              <span className="truncate max-w-[120px]">{sk.name}</span>
             </span>
           ))}
+          {collectedSkills.length > 3 && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-white/90 border border-black/10 text-[9px] text-black/60 font-mono shadow-sm">
+              +{collectedSkills.length - 3}
+            </span>
+          )}
         </div>
 
         {/* Jump & Shoot Controls */}
@@ -1601,14 +1598,17 @@ export default function ResumeGame({
                   <div className="mt-2.5">
                     <p className="text-[10px] text-black/40 mb-1">UNLOCKED COMPETENCIES:</p>
                     <div className="flex flex-wrap gap-1">
-                      {collectedSkills.map((s, idx) => (
-                        <span
-                          key={idx}
-                          className="px-2 py-0.5 rounded-full bg-[#f6f4ef] border border-black/8 text-[10px] text-[#25231f]"
-                        >
-                          {s.icon} {s.name}
-                        </span>
-                      ))}
+                      {allSkills.map((s, idx) => {
+                        const isCollected = collectedSkills.some(cs => cs.name === s.name);
+                        return (
+                          <span
+                            key={idx}
+                            className={`px-2 py-0.5 rounded-full border border-black/8 text-[10px] ${isCollected ? "bg-[#e06d45] text-white" : "bg-[#f6f4ef] text-[#25231f]"}`}
+                          >
+                            {s.icon} {s.name}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
