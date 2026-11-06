@@ -1,5 +1,5 @@
-import { useState } from "react"
-import ResumeGame from "./ResumeGame"
+import { useState, useEffect, useCallback } from "react"
+import ResumeGame, { type PersistentGameState } from "./ResumeGame"
 import avatarImg from "/shubham-avatar.jpg?url"
 import amazonImg from "/shubham-at-amazon.jpg?url"
 
@@ -70,6 +70,31 @@ function Arrow({ diagonal = false }: { diagonal?: boolean }) {
   )
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const check = () => {
+      const hasTouch =
+        window.matchMedia("(pointer: coarse)").matches ||
+        "ontouchstart" in window ||
+        navigator.maxTouchPoints > 0
+      const isNarrow = window.innerWidth < 768
+      setIsMobile(isNarrow && (hasTouch || window.innerWidth < 640))
+    }
+
+    check()
+    window.addEventListener("resize", check)
+    window.addEventListener("orientationchange", check)
+    return () => {
+      window.removeEventListener("resize", check)
+      window.removeEventListener("orientationchange", check)
+    }
+  }, [])
+
+  return isMobile
+}
+
 function GameFace() {
   return (
     <div className="game-face" aria-hidden="true">
@@ -81,11 +106,62 @@ function GameFace() {
 }
 
 export default function App() {
+  const isMobile = useIsMobile()
   const [menuOpen, setMenuOpen] = useState(false)
   const [gameStarted, setGameStarted] = useState(false)
   const [isFullScreenGame, setIsFullScreenGame] = useState(false)
   const [careerView, setCareerView] = useState<"work" | "education">("work")
   const activeTimeline = careerView === "work" ? milestones : education
+
+  const [persistentGameState, setPersistentGameState] = useState<PersistentGameState>({
+    levelIdx: 0,
+    totalXp: 0,
+    collectedSkills: [],
+    gameState: "playing",
+    knockProgress: 0,
+    isPaused: false,
+  })
+
+  // Open Fullscreen & push browser history state
+  const openFullScreen = useCallback(() => {
+    setIsFullScreenGame(true)
+    setGameStarted(true)
+    setPersistentGameState((prev) => ({ ...prev, isPaused: false }))
+    // Push history state so hardware/browser back button closes the game modal instead of exiting the site
+    window.history.pushState({ modal: "game" }, "")
+    // Try requesting real browser fullscreen on mobile if allowed
+    if (isMobile && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {})
+    }
+  }, [isMobile])
+
+  // Close Fullscreen, exit native fullscreen, and ensure game progress is preserved & paused
+  const closeFullScreen = useCallback(() => {
+    setIsFullScreenGame(false)
+    setPersistentGameState((prev) => ({ ...prev, isPaused: true }))
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {})
+    }
+    if (window.history.state?.modal === "game") {
+      window.history.back()
+    }
+  }, [])
+
+  // Handle hardware / browser back button (popstate event)
+  useEffect(() => {
+    const handlePopState = () => {
+      if (isFullScreenGame) {
+        setIsFullScreenGame(false)
+        setPersistentGameState((prev) => ({ ...prev, isPaused: true }))
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {})
+        }
+      }
+    }
+
+    window.addEventListener("popstate", handlePopState)
+    return () => window.removeEventListener("popstate", handlePopState)
+  }, [isFullScreenGame])
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#f6f4ef] text-[#25231f]">
@@ -122,11 +198,15 @@ export default function App() {
           </div>
 
           <button
-            className="hidden items-center gap-2 rounded-full bg-[#25231f] px-4 py-2 text-[12px] font-medium text-white md:flex"
+            className="hidden items-center gap-2 rounded-full bg-[#25231f] px-4 py-2 text-[12px] font-medium text-white md:flex cursor-pointer"
             onClick={() => {
-              document
-                .querySelector("#game-preview")
-                ?.scrollIntoView({ behavior: "smooth" })
+              if (isMobile) {
+                openFullScreen()
+              } else {
+                document
+                  .querySelector("#game-preview")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
             }}
           >
             Play for resume
@@ -147,6 +227,17 @@ export default function App() {
 
         {menuOpen && (
           <div className="mx-auto mt-2 grid max-w-[1240px] rounded-[24px] border border-black/10 bg-[#f6f4ef] p-4 shadow-xl md:hidden">
+            <button
+              type="button"
+              className="flex items-center justify-between border-b border-black/10 px-1 py-3.5 text-sm font-semibold text-[#e06d45] text-left cursor-pointer"
+              onClick={() => {
+                setMenuOpen(false)
+                openFullScreen()
+              }}
+            >
+              <span>🎮 Play Resume Game</span>
+              <Arrow />
+            </button>
             {[
               ["Experience", "#work"],
               ["About", "#about"],
@@ -189,11 +280,15 @@ export default function App() {
 
           <div className="mt-9 flex flex-col items-center gap-3">
             <button
-              className="group flex items-center gap-3 rounded-full bg-[#25231f] px-5 py-3.5 text-[13px] font-medium text-white"
+              className="group flex items-center gap-3 rounded-full bg-[#25231f] px-5 py-3.5 text-[13px] font-medium text-white cursor-pointer"
               onClick={() => {
-                document
-                  .querySelector("#game-preview")
-                  ?.scrollIntoView({ behavior: "smooth" })
+                if (isMobile) {
+                  openFullScreen()
+                } else {
+                  document
+                    .querySelector("#game-preview")
+                    ?.scrollIntoView({ behavior: "smooth" })
+                }
               }}
             >
               Play for resume
@@ -236,7 +331,7 @@ export default function App() {
                 <span className="text-[10px] text-black/35">01 / 04</span>
               </div>
 
-              {!gameStarted ? (
+              {!gameStarted || isFullScreenGame ? (
                 <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-6 text-center">
                   <span className="soft-orbit orbit-one pointer-events-none" />
                   <span className="soft-orbit orbit-two pointer-events-none" />
@@ -251,10 +346,18 @@ export default function App() {
                     className="relative z-20 mt-7 flex items-center gap-2 rounded-full bg-[#25231f] px-5 py-3 text-[12px] text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#e06d45] hover:shadow-md cursor-pointer select-none"
                     onClick={(e) => {
                       e.stopPropagation()
-                      setGameStarted(true)
+                      if (isMobile) {
+                        openFullScreen()
+                      } else {
+                        setGameStarted(true)
+                      }
                     }}
                   >
-                    Start
+                    {isMobile
+                      ? "Play Arcade (Fullscreen)"
+                      : persistentGameState.levelIdx > 0 || persistentGameState.totalXp > 0
+                      ? "Resume Run ▶"
+                      : "Start"}
                     <Arrow />
                   </button>
                 </div>
@@ -262,7 +365,9 @@ export default function App() {
                 <ResumeGame
                   onClose={() => setGameStarted(false)}
                   isFullScreen={false}
-                  onToggleFullScreen={() => setIsFullScreenGame(true)}
+                  savedState={persistentGameState}
+                  onStateChange={setPersistentGameState}
+                  onToggleFullScreen={openFullScreen}
                 />
               )}
             </div>
@@ -426,12 +531,27 @@ export default function App() {
       </footer>
 
       {isFullScreenGame && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center">
-          <div className="relative w-full max-w-5xl h-[85vh] bg-[#f9f8f4] rounded-3xl shadow-2xl border border-black/15 overflow-hidden">
+        <div
+          className={`fixed inset-0 z-[100] ${
+            isMobile
+              ? "p-0 bg-[#f9f8f4]"
+              : "bg-black/60 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center"
+          }`}
+        >
+          <div
+            className={`relative w-full ${
+              isMobile
+                ? "h-full rounded-none border-none shadow-none"
+                : "max-w-5xl h-[85vh] rounded-3xl shadow-2xl border border-black/15"
+            } bg-[#f9f8f4] overflow-hidden`}
+          >
             <ResumeGame
               isFullScreen={true}
-              onClose={() => setIsFullScreenGame(false)}
-              onToggleFullScreen={() => setIsFullScreenGame(false)}
+              isMobileMode={isMobile}
+              savedState={persistentGameState}
+              onStateChange={setPersistentGameState}
+              onClose={closeFullScreen}
+              onToggleFullScreen={closeFullScreen}
             />
           </div>
         </div>

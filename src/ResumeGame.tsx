@@ -194,25 +194,117 @@ interface VillainState {
   projectiles: { x: number; y: number; vx: number; vy: number; radius: number }[]
 }
 
-interface ResumeGameProps {
-  onClose?: () => void
-  isFullScreen?: boolean
-  onToggleFullScreen?: () => void
+export interface PersistentGameState {
+  levelIdx: number
+  totalXp: number
+  collectedSkills: { name: string; category: string; icon: string; xp: number }[]
+  gameState: "playing" | "level_clear" | "wispr_knock"
+  knockProgress: number
+  isPaused: boolean
 }
 
-export default function ResumeGame({ onClose, isFullScreen = false, onToggleFullScreen }: ResumeGameProps) {
+export interface ResumeGameProps {
+  onClose?: () => void
+  isFullScreen?: boolean
+  isMobileMode?: boolean
+  onToggleFullScreen?: () => void
+  savedState?: PersistentGameState
+  onStateChange?: (state: PersistentGameState) => void
+  startPaused?: boolean
+}
+
+export default function ResumeGame({
+  onClose,
+  isFullScreen = false,
+  isMobileMode = false,
+  onToggleFullScreen,
+  savedState,
+  onStateChange,
+  startPaused = false,
+}: ResumeGameProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  // Game state
-  const [currentLevelIdx, setCurrentLevelIdx] = useState(0)
-  const [gameState, setGameState] = useState<"playing" | "level_clear" | "wispr_knock">("playing")
-  const [isPaused, setIsPaused] = useState(false)
-  const [collectedSkills, setCollectedSkills] = useState<{ name: string; category: string; icon: string; xp: number }[]>([])
-  const [totalXp, setTotalXp] = useState(0)
+  // Measure exact visible viewport size (respects Chrome address bar & soft navigation)
+  const [viewport, setViewport] = useState({
+    width: typeof window !== "undefined" ? window.visualViewport?.width || window.innerWidth : 800,
+    height: typeof window !== "undefined" ? window.visualViewport?.height || window.innerHeight : 380,
+  })
+
+  // Mobile orientation detection
+  const [isPortrait, setIsPortrait] = useState(false)
+  const [cssRotateLandscape, setCssRotateLandscape] = useState(true)
+
+  useEffect(() => {
+    const updateSize = () => {
+      const w = Math.round(window.visualViewport?.width || window.innerWidth)
+      const h = Math.round(window.visualViewport?.height || window.innerHeight)
+      setViewport({ width: w, height: h })
+      setIsPortrait(h > w)
+    }
+
+    updateSize()
+    window.addEventListener("resize", updateSize)
+    window.addEventListener("orientationchange", updateSize)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", updateSize)
+      window.visualViewport.addEventListener("scroll", updateSize)
+    }
+    return () => {
+      window.removeEventListener("resize", updateSize)
+      window.removeEventListener("orientationchange", updateSize)
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", updateSize)
+        window.visualViewport.removeEventListener("scroll", updateSize)
+      }
+    }
+  }, [])
+
+  // Capture initial savedState once on mount so parent re-renders don't cause resets
+  const initialSavedStateRef = useRef(savedState)
+  const isInitializedRef = useRef(false)
+
+  // Game state (initialized from savedState if available)
+  const [currentLevelIdx, setCurrentLevelIdx] = useState(initialSavedStateRef.current?.levelIdx ?? 0)
+  const [gameState, setGameState] = useState<"playing" | "level_clear" | "wispr_knock">(
+    initialSavedStateRef.current?.gameState ?? "playing"
+  )
+  const [isPaused, setIsPaused] = useState(startPaused || (initialSavedStateRef.current?.isPaused ?? false))
+  const [collectedSkills, setCollectedSkills] = useState<{ name: string; category: string; icon: string; xp: number }[]>(
+    initialSavedStateRef.current?.collectedSkills ?? []
+  )
+  const [totalXp, setTotalXp] = useState(initialSavedStateRef.current?.totalXp ?? 0)
   const [activeNotification, setActiveNotification] = useState<string | null>(null)
-  const [knockProgress, setKnockProgress] = useState(0)
+  const [knockProgress, setKnockProgress] = useState(initialSavedStateRef.current?.knockProgress ?? 0)
   const [autoShoot, setAutoShoot] = useState(true)
+
+  // Stable ref for onStateChange so state sync doesn't cause re-render loops
+  const onStateChangeRef = useRef(onStateChange)
+  useEffect(() => {
+    onStateChangeRef.current = onStateChange
+  }, [onStateChange])
+
+  // Sync state to parent only on milestone changes, pause, or level clear
+  const syncStateToParent = useCallback(() => {
+    onStateChangeRef.current?.({
+      levelIdx: currentLevelIdx,
+      totalXp,
+      collectedSkills,
+      gameState,
+      knockProgress,
+      isPaused,
+    })
+  }, [currentLevelIdx, totalXp, collectedSkills, gameState, knockProgress, isPaused])
+
+  useEffect(() => {
+    syncStateToParent()
+  }, [currentLevelIdx, gameState, isPaused, syncStateToParent])
+
+  useEffect(() => {
+    return () => {
+      syncStateToParent()
+    }
+  }, [syncStateToParent])
 
   // Engine references (to avoid re-renders during 60FPS loop)
   const engineRef = useRef({
@@ -367,7 +459,9 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
     // Spawn skills with generous spacing so player can easily read text
     const skillsList: SkillEntity[] = []
     const spacing = 520
+    const alreadySaved = initialSavedStateRef.current?.collectedSkills ?? []
     level.skillsToCollect.forEach((sk, i) => {
+      const alreadyCollected = alreadySaved.some((c) => c.name === sk.name)
       skillsList.push({
         x: 460 + i * spacing,
         y: 200 - (i % 2 === 0 ? 25 : 60),
@@ -375,7 +469,7 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
         icon: sk.icon,
         category: sk.category,
         xp: sk.xp,
-        collected: false,
+        collected: alreadyCollected,
         bobOffset: Math.random() * Math.PI * 2,
       })
     })
@@ -493,9 +587,12 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [handleJump, handleShoot])
 
-  // Init first level
+  // Init level ONLY once on mount
   useEffect(() => {
-    initLevel(0)
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true
+      initLevel(initialSavedStateRef.current?.levelIdx ?? 0)
+    }
   }, [initLevel])
 
   // Main 60 FPS Canvas Game Loop
@@ -1154,10 +1251,32 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
   }
 
   const currentLevel = LEVELS[currentLevelIdx]
+  const shouldRotate = isMobileMode && isPortrait && cssRotateLandscape
 
   return (
     <div
       ref={containerRef}
+      style={
+        shouldRotate
+          ? {
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              width: `${viewport.height}px`,
+              height: `${viewport.width}px`,
+              maxWidth: `${viewport.height}px`,
+              maxHeight: `${viewport.width}px`,
+              transform: "translate(-50%, -50%) rotate(90deg)",
+              transformOrigin: "center center",
+            }
+          : isFullScreen
+          ? {
+              width: "100%",
+              height: `${viewport.height}px`,
+              maxHeight: "100dvh",
+            }
+          : undefined
+      }
       className={`relative flex flex-col w-full h-full select-none overflow-hidden ${
         isFullScreen ? "bg-[#f6f4ef]" : ""
       }`}
@@ -1233,10 +1352,10 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
             Auto: {autoShoot ? "ON" : "OFF"}
           </button>
 
-          {onToggleFullScreen && (
+          {onToggleFullScreen && !isMobileMode && (
             <button
               onClick={onToggleFullScreen}
-              className="text-xs px-2 py-1 rounded-md hover:bg-black/5 text-black/60 transition-colors"
+              className="text-xs px-2 py-1 rounded-md hover:bg-black/5 text-black/60 transition-colors cursor-pointer"
               title={isFullScreen ? "Exit Fullscreen" : "Fullscreen Game"}
             >
               {isFullScreen ? "Exit 🗗" : "Full ⛶"}
@@ -1246,17 +1365,17 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
           {onClose && (
             <button
               onClick={onClose}
-              className="text-xs px-1.5 py-0.5 rounded-md hover:bg-black/10 text-black/50 transition-colors"
+              className="text-xs px-2.5 py-1 rounded-full hover:bg-black/10 bg-black/5 text-black/70 transition-colors font-semibold cursor-pointer"
               title="Close"
             >
-              ✕
+              ✕ Exit
             </button>
           )}
         </div>
       </div>
 
-      {/* Expanded contextual banner ONLY in Fullscreen mode */}
-      {isFullScreen && (
+      {/* Expanded contextual banner ONLY in Fullscreen mode on desktop */}
+      {isFullScreen && !isMobileMode && (
         <div className="px-4 py-1.5 bg-[#f6f4ef] border-b border-black/5 flex items-center justify-between text-xs text-black/70">
           <span className="font-serif italic text-black/80">{currentLevel.subtitle}</span>
           <span className="text-[11px] text-black/50">{currentLevel.lore}</span>
@@ -1264,14 +1383,34 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
       )}
 
       {/* Main Canvas Area */}
-      <div className="relative flex-1 w-full h-full bg-[#f9f8f4] overflow-hidden">
+      <div className="relative flex-1 w-full h-full bg-[#f9f8f4] overflow-hidden flex items-center justify-center p-0">
         <canvas
           ref={canvasRef}
           width={800}
           height={380}
-          className="w-full h-full block touch-none"
-          onClick={handleJump}
+          className="block touch-none"
+          style={{
+            maxWidth: "100%",
+            maxHeight: "100%",
+            aspectRatio: "800 / 380",
+            objectFit: "contain",
+          }}
+          onClick={!isMobileMode ? handleJump : undefined}
         />
+
+        {/* Orientation Guidance on Mobile */}
+        {isMobileMode && isPortrait && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 bg-[#25231f]/90 text-white px-3 py-1 rounded-full text-[11px] shadow-lg flex items-center gap-2 backdrop-blur-md pointer-events-auto">
+            <span>🔄</span>
+            <span>Turn phone sideways</span>
+            <button
+              onClick={() => setCssRotateLandscape((prev) => !prev)}
+              className="ml-1 px-2 py-0.5 rounded bg-white/20 text-[10px] font-semibold hover:bg-white/30 cursor-pointer"
+            >
+              {cssRotateLandscape ? "Portrait" : "Rotate"}
+            </button>
+          </div>
+        )}
 
         {/* Transient Notifications */}
         {activeNotification && !isPaused && (
@@ -1292,7 +1431,7 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
               </p>
               <button
                 onClick={() => setIsPaused(false)}
-                className="px-5 py-2 rounded-full bg-[#25231f] text-white text-xs font-medium hover:bg-[#e06d45] transition-all shadow-md"
+                className="px-5 py-2 rounded-full bg-[#25231f] text-white text-xs font-medium hover:bg-[#e06d45] transition-all shadow-md cursor-pointer"
               >
                 Resume Run ▶
               </button>
@@ -1301,7 +1440,11 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
         )}
 
         {/* Collected Skills Tray */}
-        <div className="absolute bottom-2.5 left-2.5 flex flex-wrap gap-1 max-w-[65%] pointer-events-none z-10">
+        <div
+          className={`absolute ${
+            isMobileMode ? "bottom-14 left-2.5 max-w-[50%]" : "bottom-2.5 left-2.5 max-w-[65%]"
+          } flex flex-wrap gap-1 pointer-events-none z-10`}
+        >
           {collectedSkills.map((sk, idx) => (
             <span
               key={`${sk.name}-${idx}`}
@@ -1314,28 +1457,64 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
         </div>
 
         {/* Jump & Shoot Controls */}
-        <div className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 z-20">
-          <button
-            onPointerDown={(e) => {
-              e.preventDefault()
-              handleShoot()
-            }}
-            className="flex items-center justify-center size-10 rounded-full bg-[#e06d45] text-white shadow-md active:scale-90 transition-transform"
-            title="Shoot Insight Orb (F / Enter)"
-          >
-            ⚡
-          </button>
-          <button
-            onPointerDown={(e) => {
-              e.preventDefault()
-              handleJump()
-            }}
-            className="flex items-center justify-center size-12 rounded-full bg-[#25231f] text-white shadow-lg active:scale-90 transition-transform font-bold text-[11px]"
-            title="Jump (Space / Up)"
-          >
-            JUMP
-          </button>
-        </div>
+        {isMobileMode ? (
+          /* Mobile Touch Zones: Left half = Jump, Right half = Shoot */
+          <div className="absolute inset-0 z-20 flex pointer-events-auto touch-none select-none">
+            {/* Left Zone: Jump */}
+            <div
+              onPointerDown={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleJump()
+              }}
+              className="w-1/2 h-full flex flex-col justify-end p-3 pb-3 active:bg-black/5 transition-colors cursor-pointer"
+            >
+              <div className="inline-flex self-start items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-[#25231f]/85 text-white shadow-md border border-white/10 opacity-80 active:scale-95 transition-transform pointer-events-none">
+                <span className="text-xs font-bold tracking-wider">▲ JUMP</span>
+                <span className="text-[10px] text-white/60 font-mono">(Tap Left)</span>
+              </div>
+            </div>
+
+            {/* Right Zone: Shoot */}
+            <div
+              onPointerDown={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleShoot()
+              }}
+              className="w-1/2 h-full flex flex-col justify-end items-end p-3 pb-3 active:bg-[#e06d45]/10 transition-colors cursor-pointer"
+            >
+              <div className="inline-flex self-end items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-[#e06d45]/90 text-white shadow-md border border-white/20 opacity-85 active:scale-95 transition-transform pointer-events-none">
+                <span className="text-xs font-bold tracking-wider">⚡ SHOOT</span>
+                <span className="text-[10px] text-white/80 font-mono">(Tap Right)</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Desktop Buttons */
+          <div className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 z-20">
+            <button
+              onPointerDown={(e) => {
+                e.preventDefault()
+                handleShoot()
+              }}
+              className="flex items-center justify-center size-10 rounded-full bg-[#e06d45] text-white shadow-md active:scale-90 transition-transform cursor-pointer"
+              title="Shoot Insight Orb (F / Enter)"
+            >
+              ⚡
+            </button>
+            <button
+              onPointerDown={(e) => {
+                e.preventDefault()
+                handleJump()
+              }}
+              className="flex items-center justify-center size-12 rounded-full bg-[#25231f] text-white shadow-lg active:scale-90 transition-transform font-bold text-[11px] cursor-pointer"
+              title="Jump (Space / Up)"
+            >
+              JUMP
+            </button>
+          </div>
+        )}
 
         {/* LEVEL CLEAR MODAL */}
         {gameState === "level_clear" && (
@@ -1469,15 +1648,17 @@ export default function ResumeGame({ onClose, isFullScreen = false, onToggleFull
         )}
       </div>
 
-      {/* Footer controls guide */}
-      <div className="bg-[#f6f4ef] border-t border-black/8 px-3 py-1 flex items-center justify-between text-[10px] text-black/50">
-        <div className="flex items-center gap-2">
-          <span><kbd className="px-1 py-0.5 rounded bg-black/5 font-mono">SPACE</kbd> Jump</span>
-          <span><kbd className="px-1 py-0.5 rounded bg-black/5 font-mono">F</kbd> / <kbd className="px-1 py-0.5 rounded bg-black/5 font-mono">⚡</kbd> Orb</span>
-          <span><kbd className="px-1 py-0.5 rounded bg-black/5 font-mono">P</kbd> Pause</span>
+      {/* Footer controls guide on desktop */}
+      {!isMobileMode && (
+        <div className="bg-[#f6f4ef] border-t border-black/8 px-3 py-1 flex items-center justify-between text-[10px] text-black/50">
+          <div className="flex items-center gap-2">
+            <span><kbd className="px-1 py-0.5 rounded bg-black/5 font-mono">SPACE</kbd> Jump</span>
+            <span><kbd className="px-1 py-0.5 rounded bg-black/5 font-mono">F</kbd> / <kbd className="px-1 py-0.5 rounded bg-black/5 font-mono">⚡</kbd> Orb</span>
+            <span><kbd className="px-1 py-0.5 rounded bg-black/5 font-mono">P</kbd> Pause</span>
+          </div>
+          <span>~60–90s run</span>
         </div>
-        <span>~60–90s run</span>
-      </div>
+      )}
     </div>
   )
 }
